@@ -40,6 +40,14 @@ void FrameBuffer::Init() {
 
 }
 
+cairo_status_t
+Image::readPNG(void *c, uint8_t *data, unsigned int len) {
+    read_closure_t *closure = (read_closure_t *) c;
+    memcpy(data, closure->buf + closure->len, len);
+    closure->len += len;
+    return CAIRO_STATUS_SUCCESS;
+}
+
 Local<Object> FrameBuffer::NewInstance(Local<Value> arg, Local<Value> arg2) {
 
   Nan::EscapableHandleScope scope;
@@ -302,25 +310,56 @@ NAN_METHOD(FrameBuffer::Image) {
     double x = (info[0]->NumberValue());
     double y = (info[1]->NumberValue());
 
-    v8::String::Utf8Value path(info[2]->ToString());
-    std::string _path = std::string(*path);
+    /**********/
 
-    FrameBuffer *obj = Nan::ObjectWrap::Unwrap<FrameBuffer>(info.Holder());
+    if (info[2]->IsString()) {
+        v8::String::Utf8Value path(info[2]->ToString());
+        std::string _path = std::string(*path);
+    
+        FrameBuffer *obj = Nan::ObjectWrap::Unwrap<FrameBuffer>(info.Holder());
+    
+        cairo_t *cr = getDrawingContext(obj);
+    
+        cairo_surface_t *image = cairo_image_surface_create_from_png(_path.c_str());
+        cairo_set_source_surface(cr, image, x, y);
+        cairo_paint(cr);
+    
+        cairo_status_t status = cairo_status(cr);
+    
+        if (status != CAIRO_STATUS_SUCCESS) {
+            Nan::ThrowError("Error reading image");
+        }
+    
+        cairo_surface_destroy(image);
+        cairo_destroy(cr);
+    } else if (Buffer::HasInstance(info[2])) {
+        uint8_t *buf = (uint8_t *) Buffer::Data(info[2]->ToObject());
+        unsigned len = Buffer::Length(info[2]->ToObject());
+        status = img->loadFromBuffer(buf, len);
 
-    cairo_t *cr = getDrawingContext(obj);
 
-    cairo_surface_t *image = cairo_image_surface_create_from_png(_path.c_str());
-    cairo_set_source_surface(cr, image, x, y);
-    cairo_paint(cr);
+    
+        read_closure_t closure;
+        closure.len = 0;
+        closure.buf = buf;
 
-    cairo_status_t status = cairo_status(cr);
-
-    if (status != CAIRO_STATUS_SUCCESS) {
-        Nan::ThrowError("Error reading image");
+        FrameBuffer *obj = Nan::ObjectWrap::Unwrap<FrameBuffer>(info.Holder());
+    
+        cairo_t *cr = getDrawingContext(obj);
+    
+        cairo_surface_t *image = cairo_image_surface_create_from_png_stream(readPNG, &closure);
+        cairo_set_source_surface(cr, image, x, y);
+        cairo_paint(cr);
+    
+        cairo_status_t status = cairo_status(cr);
+    
+        if (status != CAIRO_STATUS_SUCCESS) {
+            Nan::ThrowError("Error reading image");
+        }
+    
+        cairo_surface_destroy(image);
+        cairo_destroy(cr);
     }
-
-    cairo_surface_destroy(image);
-    cairo_destroy(cr);
 
     return;
 }
