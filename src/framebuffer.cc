@@ -46,7 +46,7 @@ void FrameBuffer::Init() {
 }
 
 cairo_status_t
-Image::readPNG(void *c, uint8_t *data, unsigned int len) {
+readPNG(void *c, uint8_t *data, unsigned int len) {
     read_closure_t *closure = (read_closure_t *) c;
     memcpy(data, closure->buf + closure->len, len);
     closure->len += len;
